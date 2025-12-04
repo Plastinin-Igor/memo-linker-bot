@@ -13,3 +13,27 @@ COMMENT ON COLUMN users.created_at IS 'Дата и время создания �
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique ON users(username);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_chat_id_unique ON users(chat_id);
+
+CREATE TABLE IF NOT EXISTS saved_links (
+	link_id UUID PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	user_id UUID NOT NULL,
+	origin_url varchar(2048) NOT NULL,
+	title varchar(5000) NULL,
+	description varchar(5000) NULL,
+	image_url varchar(2048) NULL,
+	created_at timestamp DEFAULT CURRENT_TIMESTAMP,
+	CONSTRAINT saved_links_unique UNIQUE (origin_url),
+	CONSTRAINT saved_links_users_fk FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
+COMMENT ON TABLE saved_links IS 'Сохраненные ссылки';
+COMMENT ON COLUMN saved_links.origin_url IS 'Ссылка';
+COMMENT ON COLUMN saved_links.title IS 'Заголовок';
+COMMENT ON COLUMN saved_links.description IS 'Описание';
+COMMENT ON COLUMN saved_links.image_url IS 'Ссылка на картинку';
+COMMENT ON COLUMN saved_links.created_at IS 'Дата и время добавления';
+COMMENT ON COLUMN saved_links.user_id IS 'Пользователь';
+
+CREATE INDEX IF NOT EXISTS saved_links_user_id_description_idx ON saved_links USING btree (user_id, description);
+CREATE INDEX IF NOT EXISTS saved_links_user_id_idx ON saved_links USING btree (user_id);
+CREATE INDEX IF NOT EXISTS saved_links_user_id_title_idx ON saved_links USING btree (user_id, title);

@@ -2,10 +2,7 @@ package ru.plastinin.memo_linker_bot.module;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -16,6 +13,7 @@ import java.util.UUID;
 @AllArgsConstructor
 @Setter
 @Getter
+@Builder
 public class User {
 
     @Id
