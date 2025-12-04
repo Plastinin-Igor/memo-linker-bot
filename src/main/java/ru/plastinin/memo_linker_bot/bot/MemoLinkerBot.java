@@ -46,14 +46,14 @@ public class MemoLinkerBot extends TelegramLongPollingBot {
         if (!update.hasMessage() || !msg.hasText()) {
             return;
         }
-        String message = update.getMessage().getText();
-        switch (message) {
+        String[] message = update.getMessage().getText().split(" ");
+        switch (message[0]) {
             case START -> {
                 startCommand(chatId, userName);
                 log.info("START from username: {}, chatId: {}.", userName, chatId);
             }
             case SAVE -> {
-                saveCommand(chatId);
+                saveCommand(chatId, message);
                 log.info("SAVE from username: {}, chatId: {}.", userName, chatId);
             }
             case HELP -> {
@@ -87,8 +87,8 @@ public class MemoLinkerBot extends TelegramLongPollingBot {
      * Обработчик команды /save
      *
      */
-    private void saveCommand(Long chatId) {
-        String text = "тут будет save";
+    private void saveCommand(Long chatId, String[] message) {
+        String text = botService.saveCommandHandler(chatId, message);
         sendMessage(chatId, text);
     }
 
