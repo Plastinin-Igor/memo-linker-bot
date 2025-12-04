@@ -13,6 +13,9 @@ import ru.plastinin.memo_linker_bot.repository.UserRepository;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.Set;
 
 @Service
 @Slf4j
@@ -70,19 +73,71 @@ public class BotService {
      * @return String
      */
     public String saveCommandHandler(Long chatId, String[] message) {
+
+        //Проверим, что кроме команды /save есть еще что-то
+        if (message.length <= 1) {
+            return """
+                    📝 Для сохранения ссылки воспользуйтесь командой:
+                    
+                    /save https://example.com/article
+                    или
+                    /save https://example.com/article "Описание"
+                    """;
+        }
+
+        // Найдем пользователя
         User user = userRepository.getUserByChatId(chatId)
                 .orElseThrow(() -> new ServiceException("Пользователь не найден в системе"));
+
+        // Проверим, не сохранялась ли данная ссылка ранее
+        Optional<SavedLink> link = savedLinkRepository.findByOriginUrlAndUser(message[1], user);
+        if (link.isPresent()) {
+            String textErr = """
+                     🛑 Не удалось сохранить.
+                    
+                     Эта ссылка уже хранится в базе данных.
+                     Вы добавляли ее %s
+                    """;
+            return String.format(textErr, link.get().getCreatedAt().format(customFormatter));
+        }
+
         SavedLink savedLink = parseUrl(message[1]);
         savedLink.setUser(user);
+        savedLink.setCreatedAt(LocalDateTime.now());
+
+        // Обработаем теги
+        Set<String> tags = new HashSet<>();
+        for (int i = 3; i < message.length; i++) {
+            if (message[i].startsWith("#")) {
+                tags.add(message[i].replace("#", ""));
+            }
+        }
+        // Если теги есть, то добавим их
+        if (!tags.isEmpty()) {
+            savedLink.setTags(tags);
+        }
+
+        // Обработаем случаи, когда не удалось получить описание страницы
         if (savedLink.getTitle() == null || savedLink.getTitle().isEmpty() || savedLink.getTitle().isBlank()) {
             if (message.length >= 3 && !message[2].isEmpty()) {
-                savedLink.setTitle(message[2]);
+                StringBuilder title = new StringBuilder();
+                for (int i = 2; i < message.length; i++) {
+                    if (message[i].startsWith("#")) {
+                        continue; // Это теги, их надо обработать отдельно
+                    }
+                    title.append(message[i]);
+                    title.append(" ");
+                }
+                savedLink.setTitle(title.toString().replace("\"", ""));
                 savedLinkRepository.save(savedLink);
             } else {
                 return """
                         🛑 Не удалось сохранить ссылку.
                         
-                        ↩️ Воспользуйтесь командой: /save https://example.com/article "Описание"
+                        ↩️ Воспользуйтесь командой:
+                        
+                        /save https://example.com/article Описание
+                        
                         """;
             }
         } else {

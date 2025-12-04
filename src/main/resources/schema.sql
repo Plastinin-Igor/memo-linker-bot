@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS saved_links (
 	description varchar(5000) NULL,
 	image_url varchar(2048) NULL,
 	created_at timestamp DEFAULT CURRENT_TIMESTAMP,
-	CONSTRAINT saved_links_unique UNIQUE (origin_url),
+	CONSTRAINT saved_links_unique UNIQUE (origin_url, user_id),
 	CONSTRAINT saved_links_users_fk FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
 
@@ -37,3 +37,12 @@ COMMENT ON COLUMN saved_links.user_id IS 'Пользователь';
 CREATE INDEX IF NOT EXISTS saved_links_user_id_description_idx ON saved_links USING btree (user_id, description);
 CREATE INDEX IF NOT EXISTS saved_links_user_id_idx ON saved_links USING btree (user_id);
 CREATE INDEX IF NOT EXISTS saved_links_user_id_title_idx ON saved_links USING btree (user_id, title);
+
+CREATE TABLE IF NOT EXISTS saved_link_tags (
+	saved_link_link_id uuid NOT NULL,
+	tags varchar NOT NULL,
+	CONSTRAINT saved_link_tags_saved_links_fk FOREIGN KEY (saved_link_link_id) REFERENCES saved_links(link_id)
+);
+COMMENT ON TABLE saved_link_tags IS 'Теги';
+
+CREATE INDEX IF NOT EXISTS saved_link_tags_tags_idx ON saved_link_tags (tags);

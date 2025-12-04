@@ -6,11 +6,12 @@ import ru.plastinin.memo_linker_bot.module.SavedLink;
 import ru.plastinin.memo_linker_bot.module.User;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface SavedLinkRepository extends JpaRepository<SavedLink, UUID> {
 
-    Boolean findByOriginUrl(String originUrl);
+    Optional<SavedLink> findByOriginUrlAndUser(String originUrl, User user);
 
     @Query("""
             select s
