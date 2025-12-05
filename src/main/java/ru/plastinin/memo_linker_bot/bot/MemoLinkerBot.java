@@ -9,7 +9,8 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
-import ru.plastinin.memo_linker_bot.service.BotService;
+import ru.plastinin.memo_linker_bot.constants.MessageConstants;
+import ru.plastinin.memo_linker_bot.service.MemoLinkerBotService;
 
 
 @Component
@@ -17,7 +18,7 @@ import ru.plastinin.memo_linker_bot.service.BotService;
 public class MemoLinkerBot extends TelegramLongPollingBot {
 
     @Autowired
-    BotService botService;
+    MemoLinkerBotService botService;
 
     @Value("${bot.username}")
     private String botUsername;
@@ -25,6 +26,7 @@ public class MemoLinkerBot extends TelegramLongPollingBot {
     private static final String START = "/start";
     private static final String HELP = "/help";
     private static final String SAVE = "/save";
+    private static final String LIST = "/list";
 
 
     public MemoLinkerBot(@Value("${bot.token}") String botToken) {
@@ -55,6 +57,10 @@ public class MemoLinkerBot extends TelegramLongPollingBot {
             case SAVE -> {
                 saveCommand(chatId, message);
                 log.info("SAVE from username: {}, chatId: {}.", userName, chatId);
+            }
+            case LIST -> {
+                listCommand(chatId);
+                log.info("LIST from username: {}, chatId: {}.", userName, chatId);
             }
             case HELP -> {
                 helpCommand(chatId);
@@ -93,11 +99,20 @@ public class MemoLinkerBot extends TelegramLongPollingBot {
     }
 
     /**
+     *
+     *
+     */
+    private void listCommand(Long chatId) {
+        String text = botService.listCommandHandler(chatId);
+        sendMessage(chatId, text);
+    }
+
+    /**
      * Обработчик команды /help
      *
      */
     private void helpCommand(Long chatId) {
-        String text = "тут будет help";
+        String text = MessageConstants.HELP_MESSAGE;
         sendMessage(chatId, text);
     }
 
@@ -105,7 +120,7 @@ public class MemoLinkerBot extends TelegramLongPollingBot {
      * Отправка сообщения в чат
      *
      * @param chatId Long
-     * @param text String
+     * @param text   String
      */
     private void sendMessage(Long chatId, String text) {
         var chatIdStr = String.valueOf(chatId);

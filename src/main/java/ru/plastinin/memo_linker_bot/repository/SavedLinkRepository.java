@@ -21,4 +21,13 @@ public interface SavedLinkRepository extends JpaRepository<SavedLink, UUID> {
             """)
     List<SavedLink> findSavedLink(User user, String findTerm);
 
+    @Query("""
+            select s
+              from SavedLink s
+             where s.user = ?1
+             order by s.createdAt
+             LIMIT ?2
+            """)
+    List<SavedLink> findAllByUserOrderByCreatedAtLimit(User user, int limit);
+
 }
