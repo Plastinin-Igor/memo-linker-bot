@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import ru.plastinin.memo_linker_bot.configuration.StopWordsConfig;
 import ru.plastinin.memo_linker_bot.exception.ServiceException;
 import ru.plastinin.memo_linker_bot.module.SavedLink;
 import ru.plastinin.memo_linker_bot.module.User;
@@ -13,9 +15,8 @@ import ru.plastinin.memo_linker_bot.repository.UserRepository;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.HashSet;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
+
 
 @Service
 @Slf4j
@@ -26,6 +27,9 @@ public class BotService {
     private final SavedLinkRepository savedLinkRepository;
 
     private final DateTimeFormatter customFormatter = DateTimeFormatter.ofPattern("dd MMMM yyyy HH:mm:ss");
+
+    // Стоп-слова (русские и английские) используем для создания авто-тегов
+    private final StopWordsConfig stopWordsConfig;
 
     /**
      * Обработчик команды /start
@@ -72,6 +76,7 @@ public class BotService {
      * @param message String[]
      * @return String
      */
+    @Transactional
     public String saveCommandHandler(Long chatId, String[] message) {
 
         //Проверим, что кроме команды /save есть еще что-то
@@ -93,7 +98,7 @@ public class BotService {
         Optional<SavedLink> link = savedLinkRepository.findByOriginUrlAndUser(message[1], user);
         if (link.isPresent()) {
             String textErr = """
-                     🛑 Не удалось сохранить.
+                     ❌ Не удалось сохранить.
                     
                      Эта ссылка уже хранится в базе данных.
                      Вы добавляли ее %s
@@ -105,16 +110,18 @@ public class BotService {
         savedLink.setUser(user);
         savedLink.setCreatedAt(LocalDateTime.now());
 
-        // Обработаем теги
-        Set<String> tags = new HashSet<>();
-        for (int i = 3; i < message.length; i++) {
+        // Обработаем пользовательские теги (авто-теги по тексту собираются в методе parseUrl)
+        Set<String> tags = savedLink.getTags();
+        for (int i = 2; i < message.length; i++) {
             if (message[i].startsWith("#")) {
                 tags.add(message[i].replace("#", ""));
             }
         }
-        // Если теги есть, то добавим их
-        if (!tags.isEmpty()) {
-            savedLink.setTags(tags);
+        // Соберем теги в строку для ответа
+        StringBuilder tagsToString = new StringBuilder();
+        for (String tag : tags) {
+            tagsToString.append(" #")
+                    .append(tag);
         }
 
         // Обработаем случаи, когда не удалось получить описание страницы
@@ -132,11 +139,10 @@ public class BotService {
                 savedLinkRepository.save(savedLink);
             } else {
                 return """
-                        🛑 Не удалось сохранить ссылку.
-                        
+                        ❌ Не удалось сохранить ссылку.
                         ↩️ Воспользуйтесь командой:
                         
-                        /save https://example.com/article Описание
+                        <i>/save https://example.com/article "Описание" #programming #java #github</i>
                         
                         """;
             }
@@ -144,11 +150,24 @@ public class BotService {
             savedLinkRepository.save(savedLink);
         }
         String text = """
-                ✅ Сохранено
+                ✅ <b>Сохранено</b>: "%s"
                 
-                📝 %s
+                📝 %s...
+                
+                🏷️ %s
+                
                 """;
-        return String.format(text, savedLink.getTitle());
+        // Описание ссылки
+        String description;
+        if (savedLink.getDescription() == null || savedLink.getDescription().isEmpty()
+                || savedLink.getDescription().isBlank()) {
+            description = "-";
+        } else if (savedLink.getDescription().length() >= 300) {
+            description = savedLink.getDescription().substring(0, 300);
+        } else {
+            description = savedLink.getDescription();
+        }
+        return String.format(text, savedLink.getTitle(), description, tagsToString.toString());
     }
 
     /**
@@ -164,6 +183,7 @@ public class BotService {
                     .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36") // прикинемся браузером...
                     .timeout(10000)
                     .get();
+            // Найдем заголовок, описание и ссылку картинки на странице
             savedLink = SavedLink
                     .builder()
                     .originUrl(url)
@@ -171,6 +191,34 @@ public class BotService {
                     .description(doc.select("meta[name=description]").attr("content"))
                     .imageUrl(doc.select("meta[property=og:image]").attr("content"))
                     .build();
+            // Создадим авто-теги. Возьмем топ 10 слов, которые встречаются на странице
+            Set<String> tags = new HashSet<>();
+            String text = doc.text().toLowerCase();
+
+
+            // Сохраняем дефисы и апострофы, удаляем остальную пунктуацию
+            String normalizedText = text
+                    .replaceAll("[.,!?:;()\\[\\]{}«»„“”\"…–—]", " ")  // Заменяем пунктуацию на пробелы
+                    .replaceAll("\\s+", " ")                          // Убираем лишние пробелы
+                    .trim();
+
+            String[] words = normalizedText.split(" ");
+            Map<String, Integer> wordFrequency = new HashMap<>();
+            for (String word : words) {
+                if (word.length() > 3 && !stopWordsConfig.getStopWords().contains(word)) {
+                    wordFrequency.put(word, wordFrequency.getOrDefault(word, 0) + 1);
+                }
+            }
+            //Топ 10 слов
+            wordFrequency.entrySet().stream()
+                    .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                    .limit(10)
+                    .forEach(entry -> tags.add(entry.getKey()));
+
+            if (!tags.isEmpty()) {
+                savedLink.setTags(tags);
+            }
+
             return savedLink;
         } catch (Exception e) {
             log.error("Error parsing url: {}", e.getMessage());
