@@ -191,38 +191,49 @@ public class BotService {
                     .description(doc.select("meta[name=description]").attr("content"))
                     .imageUrl(doc.select("meta[property=og:image]").attr("content"))
                     .build();
-            // Создадим авто-теги. Возьмем топ 10 слов, которые встречаются на странице
-            Set<String> tags = new HashSet<>();
+            // Возьмем топ-10 слов, которые встречаются на странице и сделаем из них хештеги для быстрого поиска
             String text = doc.text().toLowerCase();
-
-
-            // Сохраняем дефисы и апострофы, удаляем остальную пунктуацию
-            String normalizedText = text
-                    .replaceAll("[.,!?:;()\\[\\]{}«»„“”\"…–—]", " ")  // Заменяем пунктуацию на пробелы
-                    .replaceAll("\\s+", " ")                          // Убираем лишние пробелы
-                    .trim();
-
-            String[] words = normalizedText.split(" ");
-            Map<String, Integer> wordFrequency = new HashMap<>();
-            for (String word : words) {
-                if (word.length() > 3 && !stopWordsConfig.getStopWords().contains(word)) {
-                    wordFrequency.put(word, wordFrequency.getOrDefault(word, 0) + 1);
-                }
-            }
-            //Топ 10 слов
-            wordFrequency.entrySet().stream()
-                    .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                    .limit(10)
-                    .forEach(entry -> tags.add(entry.getKey()));
-
+            Set<String> tags = collectTags(text);
+            // Если коллекция тегов не пустая, то сохраняем ее
             if (!tags.isEmpty()) {
                 savedLink.setTags(tags);
             }
-
             return savedLink;
         } catch (Exception e) {
             log.error("Error parsing url: {}", e.getMessage());
             return SavedLink.builder().originUrl(url).build();
         }
     }
+
+    /**
+     * Метод находит топ 10 слов на странице
+     * и добавляет их в хештеги для быстрого поиска
+     *
+     * @param text текст страницы
+     * @return Set коллекция хештегов
+     */
+    private Set<String> collectTags(String text) {
+        Set<String> tags = new HashSet<>();
+        // Сохраняем дефисы и апострофы, удаляем остальную пунктуацию
+        String normalizedText = text
+                .replaceAll("[.,!?:;()\\[\\]{}«»„“”\"…–—]", " ")  // Заменяем пунктуацию на пробелы
+                .replaceAll("\\s+", " ")                          // Убираем лишние пробелы
+                .trim();
+        // Разбиваем текст на массив слов
+        String[] words = normalizedText.split(" ");
+        Map<String, Integer> wordFrequency = new HashMap<>();
+        // Если слово больше 3 символов и не является местоимением, то добавляем в карту
+        for (String word : words) {
+            if (!word.isBlank() && word.length() > 3 && !stopWordsConfig.getStopWords().contains(word)) {
+                wordFrequency.put(word, wordFrequency.getOrDefault(word, 0) + 1);
+            }
+        }
+        //Находим топ-10 и записываем в Set
+        wordFrequency.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                .limit(10)
+                .forEach(entry -> tags.add(entry.getKey()));
+        return tags;
+    }
+
 }

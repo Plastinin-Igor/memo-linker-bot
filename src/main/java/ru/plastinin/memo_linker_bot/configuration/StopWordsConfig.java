@@ -14,7 +14,10 @@ import java.util.Set;
 @AllArgsConstructor
 @Data
 public class StopWordsConfig {
-
+    /**
+     * Словарь слов, которые не должны становится тегами
+     *
+     */
     private Set<String> stopWords = new HashSet<>();
 
     @PostConstruct
