@@ -11,8 +11,10 @@ import ru.plastinin.memo_linker_bot.configuration.StopWordsConfig;
 import ru.plastinin.memo_linker_bot.constants.MessageConstants;
 import ru.plastinin.memo_linker_bot.exception.ServiceException;
 import ru.plastinin.memo_linker_bot.module.SavedLink;
+import ru.plastinin.memo_linker_bot.module.SavedLinkTag;
 import ru.plastinin.memo_linker_bot.module.User;
 import ru.plastinin.memo_linker_bot.repository.SavedLinkRepository;
+import ru.plastinin.memo_linker_bot.repository.SavedLinkTagRepository;
 import ru.plastinin.memo_linker_bot.repository.UserRepository;
 
 import java.time.LocalDateTime;
@@ -27,6 +29,7 @@ public class MemoLinkerBotService {
 
     private final UserRepository userRepository;
     private final SavedLinkRepository savedLinkRepository;
+    private final SavedLinkTagRepository savedLinkTagRepository;
 
     private final DateTimeFormatter customFormatter = DateTimeFormatter.ofPattern("dd MMMM yyyy HH:mm:ss");
 
@@ -76,8 +79,7 @@ public class MemoLinkerBotService {
             }
 
             // Найдем пользователя
-            User user = userRepository.getUserByChatId(chatId)
-                    .orElseThrow(() -> new ServiceException("Пользователь не найден в системе"));
+            User user = getUser(chatId);
 
             // Проверим, не сохранялась ли данная ссылка ранее
             Optional<SavedLink> link = savedLinkRepository.findByOriginUrlAndUser(message[1], user);
@@ -149,16 +151,19 @@ public class MemoLinkerBotService {
      */
     public String listCommandHandler(Long chatId) {
         // Найдем пользователя
-        User user = userRepository.getUserByChatId(chatId)
-                .orElseThrow(() -> new ServiceException("Пользователь не найден в системе"));
+        User user = getUser(chatId);
 
         // Отсортированный по дате добавления список ссылок пользователя
         List<SavedLink> collections = savedLinkRepository.findAllByUserOrderByCreatedAtLimit(user, 50);
 
+        if (collections.isEmpty()) {
+            return "🏷️ У вас пока нет сохраненных ссылок. Добавьте первую ссылку с тегами!";
+        }
+
         //Составим список ссылок в одно сообщение
-        StringBuilder messageText = new StringBuilder("🔎 Вот список ваших ссылок:\n");
+        StringBuilder messageText = new StringBuilder("🔎 Вот список ваших ссылок:\n\n");
         for (SavedLink savedLink : collections) {
-            messageText.append("🏷 ")
+            messageText.append("🏷️ ")
                     .append("<a href=\"")
                     .append(savedLink.getOriginUrl())
                     .append("\">")
@@ -167,6 +172,57 @@ public class MemoLinkerBotService {
                     .append("\n");
         }
         return messageText.toString();
+    }
+
+    /**
+     * Облако тегов
+     *
+     * @param chatId Long
+     * @return String
+     */
+    public String tagsListCommandHandler(Long chatId) {
+        User user = getUser(chatId);
+        // Запишем теги в карту вместе с их количеством
+        Map<String, Integer> tagFrequency = new HashMap<>();
+        for (SavedLinkTag savedLinkTag : savedLinkTagRepository.findAllTags(user)) {
+            tagFrequency.put(savedLinkTag.getTag(), tagFrequency.getOrDefault(savedLinkTag.getTag(), 0) + 1);
+        }
+
+        if (tagFrequency.isEmpty()) {
+            return "🏷️ У вас пока нет тегов. Добавьте первую ссылку с тегами!";
+        }
+
+        // Сортируем теги по частоте использования (от большего к меньшему)
+        List<Map.Entry<String, Integer>> sortedTags = new ArrayList<>(tagFrequency.entrySet());
+        sortedTags.sort((a, b) -> b.getValue().compareTo(a.getValue()));
+
+        // Находим максимальное количество для нормализации
+        int maxCount = sortedTags.stream()
+                .mapToInt(Map.Entry::getValue)
+                .max()
+                .orElse(1);
+
+        StringBuilder messageText = new StringBuilder();
+        messageText.append("<b>🏷️ Облако тегов:</b>\n\n");
+
+        for (Map.Entry<String, Integer> entry : sortedTags) {
+            String tag = entry.getKey();
+            int count = entry.getValue();
+
+            // Определяем размер тега на основе частоты
+            String formattedTag = formatTagByFrequency(tag, count, maxCount);
+
+            messageText.append(formattedTag)
+                    .append(" (")
+                    .append(count)
+                    .append(")")
+                    .append("  ");
+        }
+
+        messageText.append("\n\n<i>Всего тегов: ").append(sortedTags.size()).append("</i>");
+
+        return messageText.toString();
+
     }
 
     /**
@@ -221,9 +277,9 @@ public class MemoLinkerBotService {
         // Разбиваем текст на массив слов
         String[] words = normalizedText.split(" ");
         Map<String, Integer> wordFrequency = new HashMap<>();
-        // Если слово больше 3 символов и не является местоимением, то добавляем в карту
+        // Если слово больше или равно 3 символов и не является местоимением, то добавляем в карту
         for (String word : words) {
-            if (!word.isBlank() && word.length() > 3 && !stopWordsConfig.getStopWords().contains(word)) {
+            if (!word.isBlank() && word.length() >= 3 && !stopWordsConfig.getStopWords().contains(word)) {
                 wordFrequency.put(word, wordFrequency.getOrDefault(word, 0) + 1);
             }
         }
@@ -233,6 +289,44 @@ public class MemoLinkerBotService {
                 .limit(10)
                 .forEach(entry -> tags.add(entry.getKey()));
         return tags;
+    }
+
+
+    /**
+     * Поиск пользователя в системе
+     *
+     * @param chatId long
+     * @return user
+     */
+    private User getUser(Long chatId) {
+        return userRepository.getUserByChatId(chatId)
+                .orElseThrow(() -> new ServiceException("Пользователь не найден в системе"));
+    }
+
+    /**
+     * Форматирование тега
+     *
+     * @param tag      тег
+     * @param count    количество в системе
+     * @param maxCount максимальное количество
+     * @return String формат тега: большой жирный шрифт, жирный шрифт, обычный шрифт, курсив
+     */
+    private String formatTagByFrequency(String tag, int count, int maxCount) {
+        double percentage = (double) count / maxCount;
+
+        if (percentage >= 0.7) {
+            // Самые частые теги - большой жирный шрифт
+            return "<b><u>#" + tag + "</u></b>";
+        } else if (percentage >= 0.4) {
+            // Средние по частоте - жирный шрифт
+            return "<b>#" + tag + "</b>";
+        } else if (percentage >= 0.2) {
+            // Реже используемые - обычный шрифт
+            return "#" + tag;
+        } else {
+            // Самые редкие - курсив
+            return "<i>#" + tag + "</i>";
+        }
     }
 
 }

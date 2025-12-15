@@ -39,6 +39,7 @@ CREATE INDEX IF NOT EXISTS saved_links_user_id_idx ON saved_links USING btree (u
 CREATE INDEX IF NOT EXISTS saved_links_user_id_title_idx ON saved_links USING btree (user_id, title);
 
 CREATE TABLE IF NOT EXISTS saved_link_tags (
+	id UUID PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	saved_link_link_id uuid NOT NULL,
 	tags varchar NOT NULL,
 	CONSTRAINT saved_link_tags_saved_links_fk FOREIGN KEY (saved_link_link_id) REFERENCES saved_links(link_id)
@@ -46,3 +47,4 @@ CREATE TABLE IF NOT EXISTS saved_link_tags (
 COMMENT ON TABLE saved_link_tags IS 'Теги';
 
 CREATE INDEX IF NOT EXISTS saved_link_tags_tags_idx ON saved_link_tags (tags);
+CREATE INDEX IF NOT EXISTS saved_link_tags_tags_idx ON saved_link_tags USING btree (tags, saved_link_link_id);

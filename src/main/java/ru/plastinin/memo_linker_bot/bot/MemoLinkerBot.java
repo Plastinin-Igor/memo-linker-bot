@@ -27,6 +27,7 @@ public class MemoLinkerBot extends TelegramLongPollingBot {
     private static final String HELP = "/help";
     private static final String SAVE = "/save";
     private static final String LIST = "/list";
+    private static final String TAGS = "/tags";
 
 
     public MemoLinkerBot(@Value("${bot.token}") String botToken) {
@@ -61,6 +62,10 @@ public class MemoLinkerBot extends TelegramLongPollingBot {
             case LIST -> {
                 listCommand(chatId);
                 log.info("LIST from username: {}, chatId: {}.", userName, chatId);
+            }
+            case TAGS -> {
+                tagsCommand(chatId);
+                log.info("TAGS from username: {}, chatId: {}.", userName, chatId);
             }
             case HELP -> {
                 helpCommand(chatId);
@@ -99,13 +104,24 @@ public class MemoLinkerBot extends TelegramLongPollingBot {
     }
 
     /**
-     *
+     * Обработчик команды /list
+     * Список всех сохраненных ссылок
      *
      */
     private void listCommand(Long chatId) {
         String text = botService.listCommandHandler(chatId);
         sendMessage(chatId, text);
     }
+
+    /**
+     * Список всех тегов
+     *
+     */
+    private void tagsCommand(Long chatId) {
+        String text = botService.tagsListCommandHandler(chatId);
+        sendMessage(chatId, text);
+    }
+
 
     /**
      * Обработчик команды /help
