@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.filter.CharacterEncodingFilter;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
@@ -20,6 +21,9 @@ public class MemoLinkerBot extends TelegramLongPollingBot {
     @Autowired
     MemoLinkerBotService botService;
 
+    @Autowired
+    private CharacterEncodingFilter characterEncodingFilter;
+
     @Value("${bot.username}")
     private String botUsername;
 
@@ -28,6 +32,7 @@ public class MemoLinkerBot extends TelegramLongPollingBot {
     private static final String SAVE = "/save";
     private static final String LIST = "/list";
     private static final String TAGS = "/tags";
+    private static final String FIND = "/find";
 
 
     public MemoLinkerBot(@Value("${bot.token}") String botToken) {
@@ -66,6 +71,10 @@ public class MemoLinkerBot extends TelegramLongPollingBot {
             case TAGS -> {
                 tagsCommand(chatId);
                 log.info("TAGS from username: {}, chatId: {}.", userName, chatId);
+            }
+            case FIND -> {
+                findCommand(chatId, message);
+                log.info("FIND from username: {}, chatId: {}.", userName, chatId);
             }
             case HELP -> {
                 helpCommand(chatId);
@@ -122,6 +131,15 @@ public class MemoLinkerBot extends TelegramLongPollingBot {
         sendMessage(chatId, text);
     }
 
+    /**
+     * Обработчик команды Find - поиск ссылок по ключевым словам
+     *
+     * @param chatId Long
+     */
+    private void findCommand(Long chatId, String[] message) {
+        String text = botService.findCommandHandler(chatId, message);
+        sendMessage(chatId, text);
+    }
 
     /**
      * Обработчик команды /help

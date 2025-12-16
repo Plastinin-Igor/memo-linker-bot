@@ -17,7 +17,7 @@ public interface SavedLinkRepository extends JpaRepository<SavedLink, UUID> {
             select s
               from SavedLink s
              where s.user = ?1
-               and (lower(s.description) like '%?2%' or lower(s.title) like '%?2%')
+               and (lower(s.description) like lower(?2) or lower(s.title) like lower(?2))
             """)
     List<SavedLink> findSavedLink(User user, String findTerm);
 
@@ -29,5 +29,8 @@ public interface SavedLinkRepository extends JpaRepository<SavedLink, UUID> {
              LIMIT ?2
             """)
     List<SavedLink> findAllByUserOrderByCreatedAtLimit(User user, int limit);
+
+
+
 
 }

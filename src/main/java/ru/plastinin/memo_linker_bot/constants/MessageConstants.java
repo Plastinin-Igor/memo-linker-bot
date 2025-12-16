@@ -30,6 +30,16 @@ public class MessageConstants {
             /save https://example.com/article "Описание"
             """;
 
+    public final static String MESSAGE_ERROR_NO_WORD_TO_FIND = """
+            🔎 Для поиска ссылки воспользуйтесь командой:
+            
+            /find [ключевые слова]
+            
+            Например:
+            /find spring boot
+            
+            """;
+
     public final static String MESSAGE_ERROR_DATA_DUPLICATION = """
              ❌ Не удалось сохранить.
             

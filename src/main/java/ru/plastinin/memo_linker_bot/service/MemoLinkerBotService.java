@@ -38,6 +38,7 @@ public class MemoLinkerBotService {
 
     private final MessageSource messageSource;
 
+
     /**
      * Обработчик команды /start
      * Добавляет нового пользователя в базу
@@ -223,6 +224,57 @@ public class MemoLinkerBotService {
 
         return messageText.toString();
 
+    }
+
+    /**
+     * Поиск ссылок по ключевым словам
+     *
+     * @param chatId Long
+     * @return результат поиска
+     */
+    @Transactional
+    public String findCommandHandler(Long chatId, String[] message) {
+        //Проверим, что кроме команды /find есть еще что-то
+        if (message.length <= 1) {
+            return MessageConstants.MESSAGE_ERROR_NO_WORD_TO_FIND;
+        }
+        //Найдем пользователя
+        User user = getUser(chatId);
+        //Соберем ключевые слова в поисковую строку
+        StringBuilder findText = new StringBuilder("%");
+        for (int i = 1; i < message.length; i++) {
+            findText.append(message[i].toLowerCase()).append("%");
+        }
+        //Поиск ссылок в базе
+        List<SavedLink> links = new ArrayList<>(savedLinkRepository.findSavedLink(user, findText.toString()));
+        if (links.isEmpty()) {
+            return """
+                    🕵️‍♂️ По вашему запросу данные не найдены!
+                    """;
+        }
+        int qnt = links.size();
+        //Составим список ссылок в одно сообщение
+        StringBuilder messageText = new StringBuilder("🔎 Вот ссылки, которые найдены по вашему запросу (" + qnt + "):\n\n");
+        for (SavedLink savedLink : links) {
+            // Добавим к сообщению теги
+            StringBuilder tags = new StringBuilder();
+            for (String tag : savedLink.getTags()) {
+                tags.append("#").append(tag).append(" ");
+            }
+            //текст сообщения
+            messageText.append("🏷️ ")
+                    .append("<a href=\"")
+                    .append(savedLink.getOriginUrl())
+                    .append("\">")
+                    .append(savedLink.getTitle())
+                    .append("</a>")
+                    .append("\n")
+                    .append(savedLink.getDescription())
+                    .append("\n")
+                    .append(tags)
+                    .append("\n\n");
+        }
+        return messageText.toString();
     }
 
     /**
