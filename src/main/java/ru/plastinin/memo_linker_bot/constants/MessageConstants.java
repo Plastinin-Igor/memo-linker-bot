@@ -30,14 +30,28 @@ public class MessageConstants {
             /save https://example.com/article "Описание"
             """;
 
-    public final static String MESSAGE_ERROR_NO_WORD_TO_FIND = """
+    public final static String MESSAGE_ERROR_FIND_LINKS = """
             🔎 Для поиска ссылки воспользуйтесь командой:
             
             /find [ключевые слова]
             
-            Например:
+            <b>Например:</b>
             /find spring boot
+            или
+            /find #java #spring #git
             
+            """;
+
+    public final static String MESSAGE_NO_DATA_FOUND = """
+            🕵️‍♂️ По вашему запросу данные не найдены!
+            
+            🔎 Для поиска ссылки воспользуйтесь командой:
+            /find [ключевые слова]
+            
+            <b>Например:</b>
+            /find spring boot
+            или
+            /find #java #spring #git
             """;
 
     public final static String MESSAGE_ERROR_DATA_DUPLICATION = """

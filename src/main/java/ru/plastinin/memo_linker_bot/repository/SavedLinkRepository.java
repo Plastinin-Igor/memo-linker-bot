@@ -30,7 +30,8 @@ public interface SavedLinkRepository extends JpaRepository<SavedLink, UUID> {
             """)
     List<SavedLink> findAllByUserOrderByCreatedAtLimit(User user, int limit);
 
-
+    List<SavedLink> findAllByTagsIn(List<String> tags);
+    List<SavedLink> findAllByUserAndTagsIn(User user, List<String> tags);
 
 
 }

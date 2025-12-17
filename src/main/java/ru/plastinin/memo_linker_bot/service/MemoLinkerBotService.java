@@ -204,7 +204,7 @@ public class MemoLinkerBotService {
                 .orElse(1);
 
         StringBuilder messageText = new StringBuilder();
-        messageText.append("<b>🏷️ Облако тегов:</b>\n\n");
+        messageText.append("<b>☁️ 🏷️ Облако тегов:</b>\n\n");
 
         for (Map.Entry<String, Integer> entry : sortedTags) {
             String tag = entry.getKey();
@@ -234,47 +234,57 @@ public class MemoLinkerBotService {
      */
     @Transactional
     public String findCommandHandler(Long chatId, String[] message) {
-        //Проверим, что кроме команды /find есть еще что-то
-        if (message.length <= 1) {
-            return MessageConstants.MESSAGE_ERROR_NO_WORD_TO_FIND;
-        }
-        //Найдем пользователя
-        User user = getUser(chatId);
-        //Соберем ключевые слова в поисковую строку
-        StringBuilder findText = new StringBuilder("%");
-        for (int i = 1; i < message.length; i++) {
-            findText.append(message[i].toLowerCase()).append("%");
-        }
-        //Поиск ссылок в базе
-        List<SavedLink> links = new ArrayList<>(savedLinkRepository.findSavedLink(user, findText.toString()));
-        if (links.isEmpty()) {
-            return """
-                    🕵️‍♂️ По вашему запросу данные не найдены!
-                    """;
-        }
-        int qnt = links.size();
-        //Составим список ссылок в одно сообщение
-        StringBuilder messageText = new StringBuilder("🔎 Вот ссылки, которые найдены по вашему запросу (" + qnt + "):\n\n");
-        for (SavedLink savedLink : links) {
-            // Добавим к сообщению теги
-            StringBuilder tags = new StringBuilder();
-            for (String tag : savedLink.getTags()) {
-                tags.append("#").append(tag).append(" ");
+        try {
+            //Проверим, что кроме команды /find есть еще что-то
+            if (message.length <= 1) {
+                return MessageConstants.MESSAGE_ERROR_FIND_LINKS;
             }
-            //текст сообщения
-            messageText.append("🏷️ ")
-                    .append("<a href=\"")
-                    .append(savedLink.getOriginUrl())
-                    .append("\">")
-                    .append(savedLink.getTitle())
-                    .append("</a>")
-                    .append("\n")
-                    .append(savedLink.getDescription())
-                    .append("\n")
-                    .append(tags)
-                    .append("\n\n");
+            //Найдем пользователя
+            User user = getUser(chatId);
+            //Соберем ключевые слова в поисковую строку, а теги в List
+            StringBuilder findText = new StringBuilder(); // поиск по заголовку и описанию
+            List<String> findTeg = new ArrayList<>(); // поиск по тегам
+            for (int i = 1; i < message.length; i++) {
+                if (message[i].startsWith("#")) {
+                    findTeg.add(message[i].replace("#", ""));
+                } else {
+                    findText.append("%").append(message[i].toLowerCase()).append("%");
+                }
+            }
+            //Поиск ссылок в базе
+            List<SavedLink> links = new ArrayList<>(savedLinkRepository.findSavedLink(user, findText.toString())); // Поиск по описанию
+            links.addAll(savedLinkRepository.findAllByUserAndTagsIn(user, findTeg)); // Поиск по тегам
+            // Если данные не найдены, то сообщим об этом
+            if (links.isEmpty()) {
+                return MessageConstants.MESSAGE_NO_DATA_FOUND;
+            }
+            int qnt = links.size();
+            //Составим список ссылок в одно сообщение
+            StringBuilder messageText = new StringBuilder("🔎 Вот ссылки, которые найдены по вашему запросу (" + qnt + "):\n\n");
+            for (SavedLink savedLink : links) {
+                // Добавим к сообщению теги
+                StringBuilder tags = new StringBuilder();
+                for (String tag : savedLink.getTags()) {
+                    tags.append("#").append(tag).append(" ");
+                }
+                //текст сообщения
+                messageText.append("🏷️ ")
+                        .append("<a href=\"")
+                        .append(savedLink.getOriginUrl())
+                        .append("\">")
+                        .append(savedLink.getTitle())
+                        .append("</a>")
+                        .append("\n")
+                        .append(savedLink.getDescription())
+                        .append("\n")
+                        .append(tags)
+                        .append("\n\n");
+            }
+            return messageText.toString();
+        } catch (Exception e) {
+            log.error("Ошибка поиска ссылок: {}", e.getMessage());
+            return MessageConstants.MESSAGE_ERROR_FIND_LINKS;
         }
-        return messageText.toString();
     }
 
     /**
