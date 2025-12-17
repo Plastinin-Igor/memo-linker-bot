@@ -34,3 +34,5 @@ build/
 
 application-dev.properties
 application-prod.properties
+/data
+*.db
