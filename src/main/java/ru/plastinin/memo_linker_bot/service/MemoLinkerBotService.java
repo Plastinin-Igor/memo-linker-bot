@@ -158,7 +158,7 @@ public class MemoLinkerBotService {
         List<SavedLink> collections = savedLinkRepository.findAllByUserOrderByCreatedAtLimit(user, 50);
 
         if (collections.isEmpty()) {
-            return "🏷️ У вас пока нет сохраненных ссылок. Добавьте первую ссылку с тегами!";
+            return MessageConstants.EMPTY_BASE; // в базе еще нет данных
         }
 
         //Составим список ссылок в одно сообщение
@@ -190,7 +190,7 @@ public class MemoLinkerBotService {
         }
 
         if (tagFrequency.isEmpty()) {
-            return "🏷️ У вас пока нет тегов. Добавьте первую ссылку с тегами!";
+            return MessageConstants.EMPTY_BASE; // в базе еще нет данных
         }
 
         // Сортируем теги по частоте использования (от большего к меньшему)

@@ -10,9 +10,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 
 import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -46,13 +45,13 @@ public class StopWordsConfig {
 
     @PostConstruct
     public void init() throws IOException {
-        File file = new File(staticResource.getFile().getAbsolutePath());
         List<String> words = new ArrayList<>();
 
-        try (BufferedReader br = new BufferedReader(new FileReader(file, StandardCharsets.UTF_8))) {
+        try (BufferedReader br = new BufferedReader(
+                new InputStreamReader(staticResource.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = br.readLine()) != null) {
-                stopWords.add(line);
+                stopWords.add(line.trim());
             }
             log.info("Файл со стоп-словами 'static/StopWords.txt' успешно прочитан. В словаре {} слов.", stopWords.size());
         } catch (IOException e) {
@@ -82,9 +81,7 @@ public class StopWordsConfig {
                     "that", "these", "those", "i", "you", "he", "she", "it", "we", "they",
                     "me", "him", "her", "us", "them", "my", "your", "his", "its", "our",
                     "their", "mine", "yours", "hers", "ours", "theirs"));
-            log.info("Создали словарь стоп-слов. В словаре {} слов.", stopWords.size());
+            log.info("Создали резервный словарь стоп-слов. В словаре {} слов.", stopWords.size());
         }
     }
-
-
 }

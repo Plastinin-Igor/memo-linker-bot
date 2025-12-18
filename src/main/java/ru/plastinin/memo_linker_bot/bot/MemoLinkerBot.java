@@ -163,7 +163,17 @@ public class MemoLinkerBot extends TelegramLongPollingBot {
         try {
             execute(sendMessage);
         } catch (TelegramApiException e) {
-            log.error("Error sending message", e);
+            // Формируем сообщение об ошибке и отправляем его обратно в чат
+            log.error("Error sending message: {}", e.getMessage());
+            var errorText = "<b>Возникла ошибка:</b>\n\n" + e.getMessage();
+            var errorSendMessage = new SendMessage(chatIdStr, errorText);
+            errorSendMessage.setParseMode("HTML");
+            try {
+                // Отправляем сообщение об ошибке
+                execute(errorSendMessage);
+            } catch (TelegramApiException ex) {
+                log.error("Не удалось отправить сообщение об ошибке. Возникла новая ошибка: {}", ex.getMessage());
+            }
         }
     }
 
