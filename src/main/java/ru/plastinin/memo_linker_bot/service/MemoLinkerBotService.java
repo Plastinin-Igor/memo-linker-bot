@@ -2,6 +2,7 @@ package ru.plastinin.memo_linker_bot.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.springframework.context.MessageSource;
@@ -38,6 +39,8 @@ public class MemoLinkerBotService {
 
     private final MessageSource messageSource;
 
+    final int MAX_MESSAGE_LENGTH = 4000; // Telegram limit
+    final int MAX_LINKS_IN_MESSAGE = 10;
 
     /**
      * Обработчик команды /start
@@ -171,6 +174,13 @@ public class MemoLinkerBotService {
                     .append(savedLink.getTitle())
                     .append("</a>")
                     .append("\n");
+
+            // ПРОВЕРКА ДЛИНЫ
+            if (messageText.length() > MAX_MESSAGE_LENGTH - 200) {
+                messageText.append("\n\n... (сообщение обрезано)");
+                break;
+            }
+
         }
         return messageText.toString();
     }
@@ -218,6 +228,12 @@ public class MemoLinkerBotService {
                     .append(count)
                     .append(")")
                     .append("  ");
+
+            // ПРОВЕРКА ДЛИНЫ
+            if (messageText.length() > MAX_MESSAGE_LENGTH - 200) {
+                messageText.append("\n\n... (сообщение обрезано)");
+                break;
+            }
         }
 
         messageText.append("\n\n<i>Всего тегов: ").append(sortedTags.size()).append("</i>");
@@ -251,17 +267,27 @@ public class MemoLinkerBotService {
                     findText.append("%").append(message[i].toLowerCase()).append("%");
                 }
             }
-            //Поиск ссылок в базе
-            List<SavedLink> links = new ArrayList<>(savedLinkRepository.findSavedLink(user, findText.toString())); // Поиск по описанию
-            links.addAll(savedLinkRepository.findAllByUserAndTagsIn(user, findTeg)); // Поиск по тегам
+
+            // Поиск по описанию
+            Set<SavedLink> links = new LinkedHashSet<>(savedLinkRepository.findSavedLink(user, findText.toString()));
+            // Поиск по тегам
+            links.addAll(savedLinkRepository.findAllByUserAndTagsIn(user, findTeg));
+
             // Если данные не найдены, то сообщим об этом
             if (links.isEmpty()) {
                 return MessageConstants.MESSAGE_NO_DATA_FOUND;
             }
             int qnt = links.size();
+            int linkCount = 0;
             //Составим список ссылок в одно сообщение
             StringBuilder messageText = new StringBuilder("🔎 Вот ссылки, которые найдены по вашему запросу (" + qnt + "):\n\n");
             for (SavedLink savedLink : links) {
+                if (linkCount++ >= MAX_LINKS_IN_MESSAGE) {
+                    messageText.append("\n\n... и ещё ")
+                            .append(links.size() - MAX_LINKS_IN_MESSAGE)
+                            .append(" ссылок");
+                    break;
+                }
                 // Добавим к сообщению теги
                 StringBuilder tags = new StringBuilder();
                 for (String tag : savedLink.getTags()) {
@@ -279,6 +305,12 @@ public class MemoLinkerBotService {
                         .append("\n")
                         .append(tags)
                         .append("\n\n");
+
+                // ПРОВЕРКА ДЛИНЫ
+                if (messageText.length() > MAX_MESSAGE_LENGTH - 200) {
+                    messageText.append("\n\n... (сообщение обрезано)");
+                    break;
+                }
             }
             return messageText.toString();
         } catch (Exception e) {
@@ -296,10 +328,18 @@ public class MemoLinkerBotService {
     private SavedLink parseUrl(String url) {
         SavedLink savedLink;
         try {
-            Document doc = Jsoup.connect(url)
-                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36") // прикинемся браузером...
-                    .timeout(10000)
-                    .get();
+            Connection connection = Jsoup.connect(url)
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .timeout(30000)                    // Таймаут подключения: 30 секунд
+                    .maxBodySize(2 * 1024 * 1024)      // Макс. размер страницы: 2 МБ
+                    .ignoreContentType(true)           // Игнорируем Content-Type
+                    .ignoreHttpErrors(true);           // Не падать на HTTP ошибках
+
+
+            Document doc = connection
+                    .execute()   // Выполняем запрос
+                    .parse();    // Парсим документ из Response
+
             // Найдем заголовок, описание и ссылку картинки на странице
             savedLink = SavedLink
                     .builder()
@@ -308,6 +348,7 @@ public class MemoLinkerBotService {
                     .description(doc.select("meta[name=description]").attr("content"))
                     .imageUrl(doc.select("meta[property=og:image]").attr("content"))
                     .build();
+
             // Возьмем топ-10 слов, которые встречаются на странице и сделаем из них хештеги для быстрого поиска
             String text = doc.text().toLowerCase();
             Set<String> tags = collectTags(text);
@@ -331,25 +372,60 @@ public class MemoLinkerBotService {
      */
     private Set<String> collectTags(String text) {
         Set<String> tags = new HashSet<>();
-        // Сохраняем дефисы и апострофы, удаляем остальную пунктуацию
-        String normalizedText = text
-                .replaceAll("[.,!?:;()\\[\\]{}«»„“”\"…–—]", " ")  // Заменяем пунктуацию на пробелы
-                .replaceAll("\\s+", " ")                          // Убираем лишние пробелы
-                .trim();
-        // Разбиваем текст на массив слов
-        String[] words = normalizedText.split(" ");
+
+        if (text == null || text.isEmpty()) {
+            return tags;
+        }
+
+        // Если текст слишком большой - берём только начало
+        // Большие статьи обычно имеют основной контент в начале
+        final int MAX_TEXT_LENGTH = 100000; // 100K символов достаточно
+        if (text.length() > MAX_TEXT_LENGTH) {
+            text = text.substring(0, MAX_TEXT_LENGTH);
+            log.debug("Текст страницы сокращён до {} символов", MAX_TEXT_LENGTH);
+        }
+
+        // 2. ПОТОКОВАЯ ОБРАБОТКА СО SCANNER
         Map<String, Integer> wordFrequency = new HashMap<>();
-        // Если слово больше или равно 3 символов и не является местоимением, то добавляем в карту
-        for (String word : words) {
-            if (!word.isBlank() && word.length() >= 3 && !stopWordsConfig.getStopWords().contains(word)) {
-                wordFrequency.put(word, wordFrequency.getOrDefault(word, 0) + 1);
+        final Set<String> stopWords = stopWordsConfig.getStopWords();
+        final int MAX_UNIQUE_WORDS = 500; // Не будем хранить все уникальные слова
+
+        try (Scanner scanner = new Scanner(text)) {
+            // Разделитель: всё, что не является буквой, апострофом или дефисом
+            scanner.useDelimiter("[^\\p{L}\\p{M}'-]+");
+
+            while (scanner.hasNext() && wordFrequency.size() < MAX_UNIQUE_WORDS) {
+                String word = scanner.next().toLowerCase();
+
+                // Проверка условий: длина и не стоп-слово
+                if (word.length() >= 3 && !stopWords.contains(word)) {
+                    wordFrequency.put(word, wordFrequency.getOrDefault(word, 0) + 1);
+                }
             }
         }
-        //Находим топ-10 и записываем в Set
-        wordFrequency.entrySet().stream()
-                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                .limit(10)
-                .forEach(entry -> tags.add(entry.getKey()));
+
+        // 3. ВЫБОР ТОП-10 СЛОВ
+        // Используем PriorityQueue для эффективного поиска топ-N
+        if (!wordFrequency.isEmpty()) {
+            // Минимальная куча для хранения топ-10
+            PriorityQueue<Map.Entry<String, Integer>> topWords =
+                    new PriorityQueue<>(Map.Entry.comparingByValue());
+
+            for (Map.Entry<String, Integer> entry : wordFrequency.entrySet()) {
+                topWords.offer(entry);
+                if (topWords.size() > 10) {
+                    topWords.poll(); // Удаляем элемент с наименьшей частотой
+                }
+            }
+
+            // Переносим результаты в Set
+            while (!topWords.isEmpty()) {
+                tags.add(topWords.poll().getKey());
+            }
+        }
+
+        log.debug("Сгенерировано {} тегов из {} уникальных слов",
+                tags.size(), wordFrequency.size());
         return tags;
     }
 
